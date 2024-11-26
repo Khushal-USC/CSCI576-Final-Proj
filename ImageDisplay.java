@@ -47,8 +47,8 @@ public class ImageDisplay {
 
         // Parse command-line arguments
         String filePath = args[0];
-        int width = 512;
-        int height = 512;
+        int width = 960;
+        int height = 540;
 		int n = 0;
 
         try {
@@ -174,6 +174,7 @@ public class ImageDisplay {
 	/** Read Image RGB
 	 *  Reads the image of given width and height at the given imgPath into the provided BufferedImage.
 	 */
+	
 	private void readImageRGB(int width, int height, String imgPath, BufferedImage img, ArrayList<Integer> R, ArrayList<Integer> G, ArrayList<Integer> B)
 	{
 		try
@@ -196,15 +197,18 @@ public class ImageDisplay {
 				{
 					byte a = 0;
 					
-					byte r = bytes[ind];
-					byte g = bytes[ind+(height*width)];
-					byte b = bytes[ind+(height*width*2)];
+					int r = bytes[ind] & 0xFF;
+                    int g = bytes[ind + width * height] & 0xFF;
+                    int b = bytes[ind + 2 * width * height] & 0xFF;
+
+                    // initialize pix in A RGB format, where a = 0 and also masked with 0xFF
+                    int pix = (0xFF << 24) | (r << 16) | (g << 8) | b; 
 
 					R.add((int)r);
 					G.add((int)g);
 					B.add((int)b);
 
-					int pix = 0xff000000 | ((r & 0xff) << 16) | ((g & 0xff) << 8) | (b & 0xff);
+					//int pix = 0xff000000 | ((r & 0xff) << 16) | ((g & 0xff) << 8) | (b & 0xff);
 					//int pix = ((a << 24) + (r << 16) + (g << 8) + b);
 					//int pix = 0xff32A852;
 					img.setRGB(x,y,pix);

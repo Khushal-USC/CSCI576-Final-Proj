@@ -13,14 +13,19 @@ import java.util.List;
 
 class Macroblock {
     public int x, y; // Position of the macroblock
+    //Size of the macroblock
+    public int x_size;
+    public int y_size;
     public boolean isForeground; // Whether it's foreground or background
     public double[][] dctCoefficientsR;
     public double[][] dctCoefficientsG;
     public double[][] dctCoefficientsB;
 
-    public Macroblock(int x, int y) {
+    public Macroblock(int x, int y, int x_size, int y_size) {
         this.x = x;
         this.y = y;
+        this.x_size = x_size;
+        this.y_size = y_size;
         this.isForeground = false;
         this.dctCoefficientsR = new double[8][8];
         this.dctCoefficientsG = new double[8][8];
@@ -240,7 +245,7 @@ public class VideoEncoder {
                 System.out.println(totalBytes + " " + frameLength + " " + "Num Frames" + numFrames);
                 // System.out.println(numFrames);
     
-                for (int i = 0; i < 10; i++) {
+                for (int i = 0; i < numFrames; i++) {
                     RGBFrameData frameData = new RGBFrameData();
                     System.out.println("Reading frame " + i);
     
@@ -317,12 +322,18 @@ public class VideoEncoder {
     
     
     
-        public void displayLabeledFrame(BufferedImage img, JLabel label, String text) {
+        public void displayLabeledFrame(BufferedImage img, BufferedImage img_prev, JLabel label, String text) {
             int outWidth = img.getWidth();
             int outHeight = img.getHeight();
         
             // Create a new BufferedImage with space for the label text
             BufferedImage newImage = new BufferedImage(outWidth, outHeight + 50, BufferedImage.TYPE_INT_RGB);
+
+            // Get macroblocks
+            System.out.println("Splitting frame into macroblocks");
+            List<Macroblock> macroblocks = segmentFrame(img, img_prev);
+            System.out.println("Rendering outlines");
+            
         
             // Draw the original image and the label text onto the new image
             Graphics g = newImage.getGraphics();
@@ -330,6 +341,12 @@ public class VideoEncoder {
             g.setColor(Color.WHITE);
             g.setFont(new Font("Arial", Font.BOLD, 20));
             g.drawString(text, 20, outHeight + 30); // Adjust text position as needed
+
+            // Draw macroblock outlines
+            for (Macroblock mb : macroblocks) {
+                g.setColor(mb.isForeground ? Color.RED : Color.BLUE);
+                g.drawRect(mb.x, mb.y, mb.x_size, mb.y_size);
+            }
             g.dispose();
         
             // Update the JLabel with the new image
@@ -366,17 +383,69 @@ public class VideoEncoder {
             // Display each frame
             for (int i = 0; i < frames.size(); i++) {
                 System.out.println("Displaying frame " + i);
-                displayLabeledFrame(frames.get(i), lbIm1, "Frame " + i);
+                displayLabeledFrame(frames.get(i), i > 0 ? frames.get(i-1) : null, lbIm1, "Frame " + i);
+                
                 try {
-                    Thread.sleep(1000);
+                    Thread.sleep(100);
                 } catch (InterruptedException e) {
                     e.printStackTrace();
                 }
             }
         }
+
+
+    public List<Macroblock> splitFrameToBlocks(BufferedImage currentFrame) {
+        int width = currentFrame.getWidth();
+        int height = currentFrame.getHeight();
+        int macroblockSize = 16;
+
+        List<Macroblock> macroblocks = new ArrayList<>();
+
+        for (int y = 0; y < height; y += macroblockSize) {
+            for (int x = 0; x < width; x += macroblockSize) {
+                // int blockWidth = Math.min(macroblockSize, width - x); // Adjust width at edges
+                // int blockHeight = Math.min(macroblockSize, height - y); // Adjust height at edges
+                int blockWidth = macroblockSize;
+                if(x + macroblockSize > width){
+                    blockWidth = macroblockSize - (x + macroblockSize - width);
+                }
+                int blockHeight = macroblockSize;
+                if(y + macroblockSize > height){
+                    blockHeight = macroblockSize - (y + macroblockSize - height);
+                }
+                Macroblock mb = new Macroblock(x, y, blockWidth, blockHeight);
+
+                macroblocks.add(mb);
+            }
+        }
+        return macroblocks;
+    }
+
+    public static void renderMacroblockOutlines(BufferedImage frame, List<Macroblock> macroblocks, int blockSize) {
+        Graphics2D g2d = frame.createGraphics();
+
+        // Set stroke and color for the outlines
+        g2d.setColor(Color.PINK);
+        g2d.setStroke(new BasicStroke(10)); // 2-pixel wide outlines
+
+        // Draw rectangles for each macroblock
+        for (Macroblock mb : macroblocks) {
+            int x = mb.x;
+            int y = mb.y;
+
+            // Draw the outline of the macroblock
+            g2d.drawRect(mb.x, mb.y, mb.x_size, mb.y_size);
+
+            // Draw a label for the macroblock
+            g2d.drawString(mb.isForeground ? "F" : "B", x + 2, y + 12);
+        }
+
+        // Release the Graphics2D context
+        g2d.dispose();
+    }
     
     
-        
+    // WIP
 
     public List<Macroblock> segmentFrame(BufferedImage currentFrame, BufferedImage previousFrame) {
         int width = currentFrame.getWidth();
@@ -387,14 +456,24 @@ public class VideoEncoder {
 
         for (int y = 0; y < height; y += macroblockSize) {
             for (int x = 0; x < width; x += macroblockSize) {
-                Macroblock mb = new Macroblock(x, y);
+                int blockWidth = macroblockSize;
+                if(x + macroblockSize > width){
+                    blockWidth = macroblockSize - (x + macroblockSize - width);
+                }
+                int blockHeight = macroblockSize;
+                if(y + macroblockSize > height){
+                    blockHeight = macroblockSize - (y + macroblockSize - height);
+                }
+                Macroblock mb = new Macroblock(x, y, blockWidth, blockHeight);
 
-                System.out.printf("Macroblock at (%d, %d): %s\n", mb.x, mb.y, mb.isForeground ? "Foreground" : "Background");
+                //System.out.printf("Macroblock at (%d, %d): %s\n", mb.x, mb.y, mb.isForeground ? "Foreground" : "Background");
                 // Calculate motion vector for this macroblock
-                int motionVector = calculateMotionVector(currentFrame, previousFrame, x, y, macroblockSize);
+                if(previousFrame != null){
+                    int motionVector = calculateMotionVector(currentFrame, previousFrame, x, y, macroblockSize);
 
-                // Determine if it's foreground or background
-                mb.isForeground = motionVector > 10; // Threshold for foreground motion
+                    // Determine if it's foreground or background
+                    mb.isForeground = motionVector > 10; // Threshold for foreground motion
+                }
                 macroblocks.add(mb);
             }
         }

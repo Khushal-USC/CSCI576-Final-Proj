@@ -145,8 +145,9 @@ public class VideoEncoder {
                         byte a = 0;
                         
                         byte r = bytes[ind];
-                        byte g = bytes[ind+(height*width)];
-                        byte b = bytes[ind+(height*width*2)];
+                        byte g = bytes[ind + 1];
+                        byte b = bytes[ind + 2];
+                        ind += 3;
 
                         // R.add((int)r);
                         // G.add((int)g);
@@ -156,7 +157,7 @@ public class VideoEncoder {
                         //int pix = ((a << 24) + (r << 16) + (g << 8) + b);
                         //int pix = 0xff32A852;
                         img.setRGB(x,y,pix);
-                        ind++;
+                        //ind++;
                     }
                 }
 
@@ -238,8 +239,9 @@ public class VideoEncoder {
                         byte a = 0;
                         
                         byte r = bytes[ind];
-                        byte g = bytes[ind+(height*width)];
-                        byte b = bytes[ind+(height*width*2)];
+                        byte g = bytes[ind + 1];
+                        byte b = bytes[ind + 2];
+                        ind += 3;
 
                         // R.add((int)r);
                         // G.add((int)g);
@@ -249,7 +251,7 @@ public class VideoEncoder {
                         //int pix = ((a << 24) + (r << 16) + (g << 8) + b);
                         //int pix = 0xff32A852;
                         frameData.addPixel((int)r, (int)g, (int)b);
-                        ind++;
+                        //ind++;
                     }
                 }
 

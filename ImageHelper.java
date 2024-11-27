@@ -64,4 +64,16 @@ public class ImageHelper {
 		WritableRaster raster = bi.copyData(null);
 		return new BufferedImage(cm, raster, isAlphaPremultiplied, null);
 	}
+
+	//Method to normalize the vector array
+	private double[] normalizeVector(double dx, double dy) {
+		int Dy = (int)dy;
+		int Dx = (int)dx;
+		double magnitude = Math.sqrt(dx * dx + dy * dy);
+		if (magnitude == 0) {
+			return new double[]{0.0, 0.0}; // Handle zero motion
+		}
+		return new double[]{dx / magnitude, dy / magnitude};
+	}
+	
 }

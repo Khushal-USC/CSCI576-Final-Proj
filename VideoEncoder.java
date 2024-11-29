@@ -116,9 +116,18 @@ public class VideoEncoder {
         }
     
         public void processVideo(String filePath, String audioPath, int width, int height, int n1, int n2) {
+
+            File file = new File(filePath);
+            long fileSizeInBytes = file.length();
+
+            // Calculate total frames
+            int frameSize = width * height * 3;
+            
+            int totalFrames = (int) Math.ceil((double) fileSizeInBytes / frameSize);
             // // Read .rgb input
 
-            ArrayList<RGBFrameData> frameDatas = readFramesRGB(filePath, width, height);
+            RGBFrameData[] frameDatas = new RGBFrameData[(int) totalFrames];
+            readFramesRGB(filePath, width, height, frameDatas, totalFrames);
 
             //Split the frames into macroblocks
             //Make list of lists of macroblocks
@@ -127,11 +136,11 @@ public class VideoEncoder {
             int macroblocksHeight = (int) Math.ceil((double) height / macroblockSize);
             int macroblocksPerFrame = macroblocksWidth * macroblocksHeight;
             
-            Macroblock[][] frameMacroblocks = new Macroblock[frameDatas.size()][macroblocksPerFrame];
-            for (int i = 0; i < frameDatas.size(); i++) {
+            Macroblock[][] frameMacroblocks = new Macroblock[frameDatas.length][macroblocksPerFrame];
+            for (int i = 0; i < frameDatas.length; i++) {
                 System.out.println("Splitting frame " + i);
                 System.out.println("Splitting frames into macroblocks " + macroblocksPerFrame);
-                Macroblock[] macroblocks = segmentFrame(frameDatas.get(i), i > 0 ? frameDatas.get(i-1) : null, width, height, macroblocksPerFrame);
+                Macroblock[] macroblocks = segmentFrame(frameDatas[i], i > 0 ? frameDatas[i-1] : null, width, height, macroblocksPerFrame);
                 frameMacroblocks[i] = macroblocks;
                 
             }
@@ -182,8 +191,7 @@ public class VideoEncoder {
             }
         }
 
-        public ArrayList<RGBFrameData> readFramesRGB(String inputFilePath, int width, int height) {
-        ArrayList<RGBFrameData> frames = new ArrayList<>();
+    public void readFramesRGB(String inputFilePath, int width, int height, RGBFrameData[] frameDatas, int totalFrames) {
         int frameLength = width * height * 3; // Size of one frame in bytes
         ByteBuffer buf = ByteBuffer.allocate(frameLength); // Buffer for one frame
         int frameCount = 0;
@@ -206,17 +214,14 @@ public class VideoEncoder {
                         }
                     }
                 }
+                frameDatas[frameCount] = frameData;
                 System.out.println("Read frame " + frameCount++);
-
-                frames.add(frameData);
                 buf.clear(); // Clear the buffer for the next frame
             }
 
         } catch (IOException e) {
             e.printStackTrace();
         }
-
-        return frames;
     }
 
     

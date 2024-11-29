@@ -122,11 +122,17 @@ public class VideoEncoder {
 
             //Split the frames into macroblocks
             //Make list of lists of macroblocks
-            List<List<Macroblock>> frameMacroblocks = new ArrayList<>();
+            int macroblockSize = 16;
+            int macroblocksWidth = (int) Math.ceil((double) width / macroblockSize);
+            int macroblocksHeight = (int) Math.ceil((double) height / macroblockSize);
+            int macroblocksPerFrame = macroblocksWidth * macroblocksHeight;
+            
+            Macroblock[][] frameMacroblocks = new Macroblock[frameDatas.size()][macroblocksPerFrame];
             for (int i = 0; i < frameDatas.size(); i++) {
                 System.out.println("Splitting frame " + i);
-                List<Macroblock> macroblocks = segmentFrame(frameDatas.get(i), i > 0 ? frameDatas.get(i-1) : null, width, height);
-                frameMacroblocks.add(macroblocks);
+                System.out.println("Splitting frames into macroblocks " + macroblocksPerFrame);
+                Macroblock[] macroblocks = segmentFrame(frameDatas.get(i), i > 0 ? frameDatas.get(i-1) : null, width, height, macroblocksPerFrame);
+                frameMacroblocks[i] = macroblocks;
                 
             }
     
@@ -138,7 +144,7 @@ public class VideoEncoder {
 
             //Add the macroblock outlines to the images
             for (int i = 0; i < imgFrames.size(); i++) {
-                drawDebugOutlines(imgFrames.get(i), frameMacroblocks.get(i));
+                drawDebugOutlines(imgFrames.get(i), frameMacroblocks[i]);
             }
     
             //Initialize the FrameAudioPlayer
@@ -241,7 +247,7 @@ public class VideoEncoder {
             return img;
         }
 
-    public void drawDebugOutlines(BufferedImage img, List<Macroblock> macroblocks) {
+    public void drawDebugOutlines(BufferedImage img, Macroblock[] macroblocks) {
         Graphics g = img.getGraphics();
         g.setColor(Color.WHITE);
 
@@ -289,28 +295,6 @@ public class VideoEncoder {
             g.setColor(Color.WHITE);
             g.setFont(new Font("Arial", Font.BOLD, 20));
             g.drawString(text, 20, outHeight + 30); // Adjust text position as needed
-
-            // // Draw macroblock outlines
-            // for (Macroblock mb : macroblocks) {
-            //     g.setColor(mb.isForeground ? Color.RED : Color.BLUE);
-            //     g.drawRect(mb.x, mb.y, mb.x_size, mb.y_size);
-
-            //     //Draw the motion vector
-            //     g.setColor(Color.GREEN);
-            //     int blockSize = 16;
-
-            //     // Draw a line indicating the motion vector
-            //     if (mb.motion_vec != null) {
-            //         int dx = mb.motion_vec[0];
-            //         int dy = mb.motion_vec[1];
-            //         g.drawLine(mb.x + blockSize / 2, mb.y + blockSize / 2, mb.x + blockSize / 2 + dx, mb.y + blockSize / 2 + dy);
-
-            //         //Draw dot at the end of the motion vector
-            //         g.setColor(Color.RED);
-            //         g.fillOval(mb.x + blockSize / 2 + dx - 2, mb.y + blockSize / 2 + dy - 2, 2, 2);
-            //     }
-            //         //g.drawLine(mb.x + mb.x_size / 2, mb.y + mb.y_size / 2, mb.x + mb.x_size / 2 + mb.motion_vec[0], mb.y + mb.y_size / 2 + mb.motion_vec[1]);
-            //     }
             g.dispose();
         
             // Update the JLabel with the new image
@@ -390,12 +374,13 @@ public class VideoEncoder {
     
     // WIP
 
-    public List<Macroblock> segmentFrame(RGBFrameData currentFrame, RGBFrameData previousFrame, int frame_width, int frame_height) {
+    public Macroblock[] segmentFrame(RGBFrameData currentFrame, RGBFrameData previousFrame, int frame_width, int frame_height, int macroBlocksPerFrame) {
         int width = frame_width;
         int height = frame_height;
         int macroblockSize = 16;
 
-        List<Macroblock> macroblocks = new ArrayList<>();
+        Macroblock[] macroblocks = new Macroblock[macroBlocksPerFrame];
+        int macroblockIndex = 0;
 
         for (int y = 0; y < height; y += macroblockSize) {
             for (int x = 0; x < width; x += macroblockSize) {
@@ -420,7 +405,7 @@ public class VideoEncoder {
                     // // Determine if it's foreground or background
                     // mb.isForeground = motionVector > 10; // Threshold for foreground motion
                 }
-                macroblocks.add(mb);
+                macroblocks[macroblockIndex++] = mb;
             }
         }
         return macroblocks;

@@ -93,6 +93,7 @@ public class FrameAudioPlayer {
         // Play the frames with synchronized audio
         playFramesWithAudio(testFrames, 30, audioFile);
     }
+    
 
     /**
      * Generates test frames with a simple gradient effect for demonstration.

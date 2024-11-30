@@ -14,7 +14,7 @@ Right now the numbers dont do anything, but make sure you choose the correct aud
 
 If you are getting `java.lang.OutOfMemoryError`, you can try setting the max heap size to 8GB using the `-Xmx8G` flag and setting the initial heap size to 4GB using the `-Xms4GV` flag as follows.
 ```
-java -Xmx8G -Xms4GV ideoEncoder .\rgb_video\Stairs.rgb .\wavs\Stairs.wav 3 3
+java -Xmx8G -Xms4G VideoEncoder .\rgb_video\Stairs.rgb .\wavs\Stairs.wav 3 3
 ```
 
 # Image Display Instructions 

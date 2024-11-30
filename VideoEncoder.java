@@ -4,13 +4,7 @@ import java.io.*;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.ArrayList;
-import java.util.Arrays;
-
-import javax.imageio.ImageIO;
 import javax.swing.*;
-
-import java.util.Collections;
-import java.util.Comparator;
 import java.util.List;
 
 class Macroblock {
@@ -85,6 +79,9 @@ public class VideoEncoder {
                 }
                 return;
             }
+
+            long maxHeapSize = Runtime.getRuntime().maxMemory();
+            System.out.println("Max Heap Size: " + maxHeapSize / (1024 * 1024) + " MB");
     
             // Parse command-line arguments
             String filePath = args[0];

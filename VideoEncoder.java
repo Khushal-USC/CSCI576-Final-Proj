@@ -4,6 +4,8 @@ import java.io.*;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.ArrayList;
+import java.util.Arrays;
+
 import javax.swing.*;
 import java.util.List;
 
@@ -273,7 +275,7 @@ public class VideoEncoder {
                 g.fillOval(mb.x + blockSize / 2 + dx - 2, mb.y + blockSize / 2 + dy - 2, 2, 2);
             }
                 //g.drawLine(mb.x + mb.x_size / 2, mb.y + mb.y_size / 2, mb.x + mb.x_size / 2 + mb.motion_vec[0], mb.y + mb.y_size / 2 + mb.motion_vec[1]);
-            }
+        }
         g.dispose();
     }
     
@@ -384,47 +386,65 @@ public class VideoEncoder {
         Macroblock[] macroblocks = new Macroblock[macroBlocksPerFrame];
         int macroblockIndex = 0;
 
+        // Store the motion vectors for global motion estimation
+        double[] globalMotion = new double[2];
+
+        // Calculate motion vectors for all macroblocks
         for (int y = 0; y < height; y += macroblockSize) {
             for (int x = 0; x < width; x += macroblockSize) {
                 int blockWidth = macroblockSize;
-                if(x + macroblockSize > width){
+                if (x + macroblockSize > width) {
                     blockWidth = macroblockSize - (x + macroblockSize - width);
                 }
                 int blockHeight = macroblockSize;
-                if(y + macroblockSize > height){
+                if (y + macroblockSize > height) {
                     blockHeight = macroblockSize - (y + macroblockSize - height);
                 }
+
                 Macroblock mb = new Macroblock(x, y, blockWidth, blockHeight);
 
-                //System.out.printf("Macroblock at (%d, %d): %s\n", mb.x, mb.y, mb.isForeground ? "Foreground" : "Background");
-                // Calculate motion vector for this macroblock
-                if(previousFrame != null){
+                if (previousFrame != null) {
                     int[] motionVector = calculateMotionVector(currentFrame, previousFrame, frame_width, frame_height, x, y, macroblockSize);
                     mb.motion_vec = motionVector;
 
-
-                    //NOT YET
-                    // // Determine if it's foreground or background
-                    // mb.isForeground = motionVector > 10; // Threshold for foreground motion
+                    // Store valid motion vectors for global motion estimation
+                    if (motionVector != null) {
+                        globalMotion[0] += motionVector[0];
+                        globalMotion[1] += motionVector[1];
+                    }
                 }
+
                 macroblocks[macroblockIndex++] = mb;
             }
         }
+
+        // Estimate global motion (average of motion vectors) since so that each video uses a threshhold relative to each frame
+        globalMotion[0] /= macroblocks.length;
+        globalMotion[1] /= macroblocks.length;
+
+        System.out.printf("Global Motion Vector: (%f, %f)\n", globalMotion[0], globalMotion[1]);
+
+        // Classify macroblocks as foreground or background
+        for (Macroblock mb : macroblocks) {
+            if (mb.motion_vec != null) {
+                double relativeMotionX = mb.motion_vec[0] - globalMotion[0];
+                double relativeMotionY = mb.motion_vec[1] - globalMotion[1];
+                double relativeMagnitude = Math.sqrt(relativeMotionX * relativeMotionX + relativeMotionY * relativeMotionY);
+
+                // System.out.println("Relative magnitude: " + relativeMagnitude);
+
+                // Threshold based on relative magnitude
+                if (relativeMagnitude > 3) {
+                    mb.isForeground = true;
+                } 
+                else {
+                    mb.isForeground = false;
+                }
+            }
+        }
+
         return macroblocks;
     }
-
-    int[] computeAverageMotionVector(List<Macroblock> macroblocks, int rows, int cols) {
-        int sumDx = 0, sumDy = 0, totalBlocks = 0;
-
-        for (Macroblock mb : macroblocks) {
-            sumDx += mb.motion_vec[0];
-            sumDy += mb.motion_vec[1];
-            totalBlocks++;
-        }
-    
-        return new int[] {sumDx / totalBlocks, sumDy / totalBlocks}; // Average dx, dy
-    }
-    
 
     private int[] calculateMotionVector(RGBFrameData currentFrame, RGBFrameData previousFrame, int frame_width, int frame_height, int x, int y, int size) {
         int width = frame_width;
@@ -473,39 +493,6 @@ public class VideoEncoder {
         }
 
         return bestVector;
-    }
-
-    public void applyDCTAndQuantize(Macroblock mb, BufferedImage frame, int n) {
-        int macroblockSize = 16;
-        double[][] blockR = new double[8][8];
-        double[][] blockG = new double[8][8];
-        double[][] blockB = new double[8][8];
-
-        for (int i = 0; i < macroblockSize; i += 8) {
-            for (int j = 0; j < macroblockSize; j += 8) {
-                for (int y = 0; y < 8; y++) {
-                    for (int x = 0; x < 8; x++) {
-                        int px = mb.x + i + x;
-                        int py = mb.y + j + y;
-                        if (px >= frame.getWidth() || py >= frame.getHeight())
-                            continue;
-
-                        Color pixel = new Color(frame.getRGB(px, py));
-                        blockR[y][x] = pixel.getRed();
-                        blockG[y][x] = pixel.getGreen();
-                        blockB[y][x] = pixel.getBlue();
-                    }
-                }
-
-                mb.dctCoefficientsR = performDCT(blockR);
-                mb.dctCoefficientsG = performDCT(blockG);
-                mb.dctCoefficientsB = performDCT(blockB);
-
-                quantize(mb.dctCoefficientsR, n);
-                quantize(mb.dctCoefficientsG, n);
-                quantize(mb.dctCoefficientsB, n);
-            }
-        }
     }
 
     private double[][] performDCT(double[][] block) {

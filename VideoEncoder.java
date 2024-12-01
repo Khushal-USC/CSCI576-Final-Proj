@@ -495,6 +495,35 @@ public class VideoEncoder {
         return bestVector;
     }
 
+    public void applyDCTAndQuantize(Macroblock mb, BufferedImage frame, int n) {
+        int macroblockSize = 16;
+        double[][] blockR = new double[8][8];
+        double[][] blockG = new double[8][8];
+        double[][] blockB = new double[8][8];
+        for (int i = 0; i < macroblockSize; i += 8) {
+            for (int j = 0; j < macroblockSize; j += 8) {
+                for (int y = 0; y < 8; y++) {
+                    for (int x = 0; x < 8; x++) {
+                        int px = mb.x + i + x;
+                        int py = mb.y + j + y;
+                        if (px >= frame.getWidth() || py >= frame.getHeight())
+                            continue;
+                        Color pixel = new Color(frame.getRGB(px, py));
+                        blockR[y][x] = pixel.getRed();
+                        blockG[y][x] = pixel.getGreen();
+                        blockB[y][x] = pixel.getBlue();
+                    }
+                }
+                mb.dctCoefficientsR = performDCT(blockR);
+                mb.dctCoefficientsG = performDCT(blockG);
+                mb.dctCoefficientsB = performDCT(blockB);
+                quantize(mb.dctCoefficientsR, n);
+                quantize(mb.dctCoefficientsG, n);
+                quantize(mb.dctCoefficientsB, n);
+            }
+        }
+    }
+
     private double[][] performDCT(double[][] block) {
         int size = 8;
         double[][] transformed = new double[size][size];

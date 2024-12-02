@@ -142,8 +142,43 @@ public class VideoEncoder {
                 Macroblock[] macroblocks = segmentFrame(frameDatas[i], i > 0 ? frameDatas[i-1] : null, width, height, macroblocksPerFrame);
                 frameMacroblocks[i] = macroblocks;
                 
+
+                // // WIP : DCT
+                // for (Macroblock mb : macroblocks) {
+                //     if (mb.isForeground) {
+                //         applyDCTAndQuantize(mb, frameDatas[i], width, height, n1);
+                //     }
+                //     else {
+                //         applyDCTAndQuantize(mb, frameDatas[i], width, height, n2);
+                //     }
+                // }
+                
+                // // WIP : IDCT
+                // for (Macroblock mb : macroblocks) {
+                //     if (mb.isForeground) {
+                //         applyIDCTAndDequantize(mb,frameDatas[i], width, height, n1);
+                //     }
+                //     else {
+                //         applyIDCTAndDequantize(mb,frameDatas[i], width, height, n2);
+                //     }
+                // }
+
+                // final int index = i;
+                // Arrays.stream(macroblocks)
+                // .parallel() // Use parallel stream for concurrent processing
+                // .forEach(mb -> {
+                //     if (mb.isForeground) {
+                //         applyDCTAndQuantize(mb, frameDatas[index], width, height, n1);
+                //         applyIDCTAndDequantize(mb,frameDatas[index], width, height, n1);
+                //     }
+                //     else {
+                //         applyDCTAndQuantize(mb, frameDatas[index], width, height, n2);
+                //         applyIDCTAndDequantize(mb,frameDatas[index], width, height, n2);
+                //     }
+                // });
+                
             }
-    
+
             //Convert the RGB data to images
             ArrayList<BufferedImage> imgFrames = new ArrayList<>();
             for (RGBFrameData frame : frameDatas) {
@@ -434,7 +469,7 @@ public class VideoEncoder {
                 // System.out.println("Relative magnitude: " + relativeMagnitude);
 
                 // Threshold based on relative magnitude
-                if (relativeMagnitude > 3) {
+                if (relativeMagnitude > 4) {
                     mb.isForeground = true;
                 } 
                 else {
@@ -451,11 +486,11 @@ public class VideoEncoder {
         int height = frame_height;
 
         int[] bestVector = new int[2];
-        int bestMAD = Integer.MAX_VALUE;
+        double bestMAD = Integer.MAX_VALUE;
 
         for (int dy = -4; dy <= 4; dy++) {
             for (int dx = -4; dx <= 4; dx++) {
-                int mad = 0;
+                double mad = 0;
 
                 for (int yy = 0; yy < size; yy++) {
                     for (int xx = 0; xx < size; xx++) {
@@ -480,22 +515,28 @@ public class VideoEncoder {
                         int diffG = Math.abs(gCurrent - gPrevious);
                         int diffB = Math.abs(bCurrent - bPrevious);
 
-                        mad += (diffR + diffG + diffB) / 3;
+                        mad += ((diffR + diffG + diffB) / 3.0);
                     }
                 }
+
+                // Add a penalty term to favor smaller motion vectors
+                double penalty = (Math.abs(dx) + Math.abs(dy)) * 0.5;
+                mad += penalty;
 
                 if (mad < bestMAD) {
                     bestMAD = mad;
                     bestVector[0] = dx;
                     bestVector[1] = dy;
                 }
+
+                // System.out.println(bestMAD + " " + dx + " " + dy);
             }
         }
 
         return bestVector;
     }
 
-    public void applyDCTAndQuantize(Macroblock mb, BufferedImage frame, int n) {
+    public void applyDCTAndQuantize(Macroblock mb, RGBFrameData frame, int width, int height, int n) {
         int macroblockSize = 16;
         double[][] blockR = new double[8][8];
         double[][] blockG = new double[8][8];
@@ -506,12 +547,12 @@ public class VideoEncoder {
                     for (int x = 0; x < 8; x++) {
                         int px = mb.x + i + x;
                         int py = mb.y + j + y;
-                        if (px >= frame.getWidth() || py >= frame.getHeight())
+                        if (px >= width || py >= height)
                             continue;
-                        Color pixel = new Color(frame.getRGB(px, py));
-                        blockR[y][x] = pixel.getRed();
-                        blockG[y][x] = pixel.getGreen();
-                        blockB[y][x] = pixel.getBlue();
+                        int idx = py * width + px;
+                        blockR[y][x] = frame.R[idx];
+                        blockG[y][x] = frame.G[idx];
+                        blockB[y][x] = frame.B[idx];
                     }
                 }
                 mb.dctCoefficientsR = performDCT(blockR);
@@ -550,8 +591,77 @@ public class VideoEncoder {
     private void quantize(double[][] block, int n) {
         for (int y = 0; y < 8; y++) {
             for (int x = 0; x < 8; x++) {
-                block[y][x] = Math.round(block[y][x] / Math.pow(2, n)) * Math.pow(2, n);
+                block[y][x] = Math.round(block[y][x] / Math.pow(2, n));
             }
         }
+    }
+
+    private void applyIDCTAndDequantize(Macroblock mb, RGBFrameData frame, int width, int height, int n) {
+        int macroblockSize = 16;
+        double[][] blockR = new double[8][8];
+        double[][] blockG = new double[8][8];
+        double[][] blockB = new double[8][8];
+        for (int i = 0; i < macroblockSize; i += 8) {
+            for (int j = 0; j < macroblockSize; j += 8) {
+                // Dequantize coefficients
+                dequantize(mb.dctCoefficientsR, n);
+                dequantize(mb.dctCoefficientsG, n);
+                dequantize(mb.dctCoefficientsB, n);
+    
+                // Perform IDCT
+                blockR = performIDCT(mb.dctCoefficientsR);
+                blockG = performIDCT(mb.dctCoefficientsG);
+                blockB = performIDCT(mb.dctCoefficientsB);
+    
+                // Store reconstructed pixel values back into the frame
+                for (int y = 0; y < 8; y++) {
+                    for (int x = 0; x < 8; x++) {
+                        int px = mb.x + i + x;
+                        int py = mb.y + j + y;
+                        if (px >= width || py >= height)
+                            continue;
+                        int idx = py * width + px;
+                        frame.R[idx] = clipToByte(blockR[y][x]);
+                        frame.G[idx] = clipToByte(blockG[y][x]);
+                        frame.B[idx] = clipToByte(blockB[y][x]);
+                    }
+                }
+            }
+        }
+    }
+    
+    private double[][] performIDCT(double[][] block) {
+        int size = 8;
+        double[][] reconstructed = new double[size][size];
+    
+        for (int x = 0; x < size; x++) {
+            for (int y = 0; y < size; y++) {
+                double sum = 0.0;
+                for (int u = 0; u < size; u++) {
+                    for (int v = 0; v < size; v++) {
+                        double cu = (u == 0) ? 1 / Math.sqrt(2) : 1.0;
+                        double cv = (v == 0) ? 1 / Math.sqrt(2) : 1.0;
+                        sum += cu * cv * block[u][v] *
+                               Math.cos((2 * x + 1) * u * Math.PI / 16) *
+                               Math.cos((2 * y + 1) * v * Math.PI / 16);
+                    }
+                }
+                reconstructed[y][x] = 0.25 * sum;
+            }
+        }
+    
+        return reconstructed;
+    }
+    
+    private void dequantize(double[][] block, int n) {
+        for (int y = 0; y < 8; y++) {
+            for (int x = 0; x < 8; x++) {
+                block[y][x] *= Math.pow(2, n);
+            }
+        }
+    }
+    
+    private int clipToByte(double value) {
+        return (int) Math.max(0, Math.min(255, Math.round(value)));
     }
 }

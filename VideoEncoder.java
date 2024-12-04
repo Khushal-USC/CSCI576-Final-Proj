@@ -420,10 +420,6 @@ public class VideoEncoder {
         Macroblock[] macroblocks = new Macroblock[macroBlocksPerFrame];
         int macroblockIndex = 0;
 
-
-        // Store the motion vectors for global motion estimation
-    
-        // Store the motion vectors for global motion estimation
         double[] globalMotion = new double[2];
     
         // Calculate motion vectors for all macroblocks

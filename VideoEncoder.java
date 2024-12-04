@@ -412,129 +412,170 @@ public class VideoEncoder {
     
     
     // WIP
-
-    public Macroblock[] segmentFrame(RGBFrameData currentFrame, RGBFrameData previousFrame, int frame_width, int frame_height, int macroBlocksPerFrame) {
-        int width = frame_width;
-        int height = frame_height;
+    public Macroblock[] segmentFrame(RGBFrameData currentFrame, RGBFrameData previousFrame, int frameWidth, int frameHeight, int macroBlocksPerFrame) {
+        int width = frameWidth;
+        int height = frameHeight;
         int macroblockSize = 16;
-
+    
         Macroblock[] macroblocks = new Macroblock[macroBlocksPerFrame];
         int macroblockIndex = 0;
 
+
+        // Store the motion vectors for global motion estimation
+    
         // Store the motion vectors for global motion estimation
         double[] globalMotion = new double[2];
-
+    
         // Calculate motion vectors for all macroblocks
         for (int y = 0; y < height; y += macroblockSize) {
             for (int x = 0; x < width; x += macroblockSize) {
-                int blockWidth = macroblockSize;
-                if (x + macroblockSize > width) {
-                    blockWidth = macroblockSize - (x + macroblockSize - width);
-                }
-                int blockHeight = macroblockSize;
-                if (y + macroblockSize > height) {
-                    blockHeight = macroblockSize - (y + macroblockSize - height);
-                }
-
+                int blockWidth = Math.min(macroblockSize, width - x);
+                int blockHeight = Math.min(macroblockSize, height - y);
+    
                 Macroblock mb = new Macroblock(x, y, blockWidth, blockHeight);
-
+    
                 if (previousFrame != null) {
-                    int[] motionVector = calculateMotionVector(currentFrame, previousFrame, frame_width, frame_height, x, y, macroblockSize);
+                    int[] motionVector = calculateMotionVector(currentFrame, previousFrame, frameWidth, frameHeight, x, y, macroblockSize);
                     mb.motion_vec = motionVector;
-
-                    // Store valid motion vectors for global motion estimation
+    
+                    // Calculate global motion
                     if (motionVector != null) {
                         globalMotion[0] += motionVector[0];
                         globalMotion[1] += motionVector[1];
                     }
                 }
-
+    
                 macroblocks[macroblockIndex++] = mb;
             }
         }
-
-        // Estimate global motion (average of motion vectors) since so that each video uses a threshhold relative to each frame
+    
+        // Estimate global motion (average of all motion vectors)
         globalMotion[0] /= macroblocks.length;
         globalMotion[1] /= macroblocks.length;
-
-        System.out.printf("Global Motion Vector: (%f, %f)\n", globalMotion[0], globalMotion[1]);
-
+    
+        // System.out.printf("Global Motion Vector: (%f, %f)\n", globalMotion[0], globalMotion[1]);
+    
         // Classify macroblocks as foreground or background
         for (Macroblock mb : macroblocks) {
             if (mb.motion_vec != null) {
                 double relativeMotionX = mb.motion_vec[0] - globalMotion[0];
                 double relativeMotionY = mb.motion_vec[1] - globalMotion[1];
                 double relativeMagnitude = Math.sqrt(relativeMotionX * relativeMotionX + relativeMotionY * relativeMotionY);
-
-                // System.out.println("Relative magnitude: " + relativeMagnitude);
-
-                // Threshold based on relative magnitude
-                if (relativeMagnitude > 4) {
-                    mb.isForeground = true;
-                } 
-                else {
-                    mb.isForeground = false;
-                }
+    
+                mb.isForeground = relativeMagnitude > 3.5;
+            } 
+            else {
+                // Default to background if no motion vector
+                mb.isForeground = false;
             }
         }
-
+    
+        mergeForegroundRegions(macroblocks, frameWidth, frameHeight, macroblockSize);
+    
         return macroblocks;
+    }
+    
+    private void mergeForegroundRegions(Macroblock[] macroblocks, int frameWidth, int frameHeight, int macroblockSize) {
+        int blocksPerRow = frameWidth / macroblockSize;
+    
+        for (int i = 0; i < macroblocks.length; i++) {
+            Macroblock current = macroblocks[i];
+            if (!current.isForeground) continue;
+    
+            int x = current.x / macroblockSize;
+            int y = current.y / macroblockSize;
+    
+            // Check neighbors (up, down, left, right)
+            int[][] neighbors = {{x - 1, y}, {x + 1, y}, {x, y - 1}, {x, y + 1}};
+            boolean hasForegroundNeighbor = false;
+    
+            for (int[] neighbor : neighbors) {
+                int nx = neighbor[0];
+                int ny = neighbor[1];
+    
+                if (nx >= 0 && ny >= 0 && nx < blocksPerRow && ny < (frameHeight / macroblockSize)) {
+                    int neighborIndex = ny * blocksPerRow + nx;
+                    Macroblock neighborBlock = macroblocks[neighborIndex];
+    
+                    if (neighborBlock.isForeground) {
+                        hasForegroundNeighbor = true;
+                        break;
+                    }
+                }
+            }
+    
+            // If foreground block has no foreground neighbors, re-classify as background
+            if (!hasForegroundNeighbor) {
+                current.isForeground = false;
+            }
+        }
     }
 
     private int[] calculateMotionVector(RGBFrameData currentFrame, RGBFrameData previousFrame, int frame_width, int frame_height, int x, int y, int size) {
         int width = frame_width;
         int height = frame_height;
-
-        int[] bestVector = new int[2];
-        double bestMAD = Integer.MAX_VALUE;
-
-        for (int dy = -4; dy <= 4; dy++) {
-            for (int dx = -4; dx <= 4; dx++) {
+    
+        int[] bestVector = {0, 0};
+        double bestMAD = Double.MAX_VALUE;
+    
+        int searchRange = 4;
+    
+        for (int dy = -searchRange; dy <= searchRange; dy++) {
+            for (int dx = -searchRange; dx <= searchRange; dx++) {
                 double mad = 0;
-
+                int validPixels = 0;
+    
                 for (int yy = 0; yy < size; yy++) {
                     for (int xx = 0; xx < size; xx++) {
                         int cx = x + xx;
                         int cy = y + yy;
                         int px = cx + dx;
                         int py = cy + dy;
-
-                        if (cx < 0 || cx >= width || cy < 0 || cy >= height ||
-                                px < 0 || px >= width || py < 0 || py >= height)
+    
+                        // Out-of-bound indices
+                        px = Math.max(0, Math.min(px, width - 1));
+                        py = Math.max(0, Math.min(py, height - 1));
+    
+                        if (cx < 0 || cx >= width || cy < 0 || cy >= height) {
                             continue;
-
+                        }
+    
+                        // Use luminance
                         int rCurrent = currentFrame.R[cy * width + cx];
                         int gCurrent = currentFrame.G[cy * width + cx];
                         int bCurrent = currentFrame.B[cy * width + cx];
-
+    
                         int rPrevious = previousFrame.R[py * width + px];
                         int gPrevious = previousFrame.G[py * width + px];
                         int bPrevious = previousFrame.B[py * width + px];
-
-                        int diffR = Math.abs(rCurrent - rPrevious);
-                        int diffG = Math.abs(gCurrent - gPrevious);
-                        int diffB = Math.abs(bCurrent - bPrevious);
-
-                        mad += ((diffR + diffG + diffB) / 3.0);
+    
+                        int luminanceCurrent = (int) (0.299 * rCurrent + 0.587 * gCurrent + 0.114 * bCurrent);
+                        int luminancePrevious = (int) (0.299 * rPrevious + 0.587 * gPrevious + 0.114 * bPrevious);
+    
+                        int diff = Math.abs(luminanceCurrent - luminancePrevious);
+                        mad += diff;
+                        validPixels++;
                     }
                 }
-
-                // Add a penalty term to favor smaller motion vectors
-                double penalty = (Math.abs(dx) + Math.abs(dy)) * 0.5;
+    
+                // Normalize MAD
+                if (validPixels > 0) {
+                    mad /= validPixels;
+                }
+    
+                // Apply a penalty
+                double penalty = (Math.abs(dx) + Math.abs(dy)) * 0.2;
                 mad += penalty;
-
+    
                 if (mad < bestMAD) {
                     bestMAD = mad;
                     bestVector[0] = dx;
                     bestVector[1] = dy;
                 }
-
-                // System.out.println(bestMAD + " " + dx + " " + dy);
             }
         }
-
         return bestVector;
-    }
+    }    
 
     public void applyDCTAndQuantize(Macroblock mb, RGBFrameData frame, int width, int height, int n) {
         int macroblockSize = 16;

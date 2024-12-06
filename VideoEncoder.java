@@ -444,6 +444,14 @@ public class VideoEncoder {
                 macroblocks[macroblockIndex++] = mb;
             }
         }
+
+        //if no previous frame, just mark all as foreground and return the macroblocks, this is the first frame
+        if(previousFrame == null){
+            for (Macroblock mb : macroblocks) {
+                mb.isForeground = true;
+            }
+            return macroblocks;
+        }
     
         // Estimate global motion (average of all motion vectors)
         globalMotion[0] /= macroblocks.length;

@@ -18,9 +18,9 @@ class Macroblock {
     public int x_size;
     public int y_size;
     public boolean isForeground; // Whether it's foreground or background
-    public double[][] dctCoefficientsR;
-    public double[][] dctCoefficientsG;
-    public double[][] dctCoefficientsB;
+    public double[][][] dctCoefficientsR;
+    public double[][][] dctCoefficientsG;
+    public double[][][] dctCoefficientsB;
 
     public Macroblock(int x, int y, int x_size, int y_size) {
         this.x = x;
@@ -28,9 +28,9 @@ class Macroblock {
         this.x_size = x_size;
         this.y_size = y_size;
         this.isForeground = false;
-        this.dctCoefficientsR = new double[8][8];
-        this.dctCoefficientsG = new double[8][8];
-        this.dctCoefficientsB = new double[8][8];
+        this.dctCoefficientsR = new double[4][8][8];
+        this.dctCoefficientsG = new double[4][8][8];
+        this.dctCoefficientsB = new double[4][8][8];
     }
 }
 
@@ -229,13 +229,20 @@ public class DCTVideoEncoder {
         Macroblock macroblock = new Macroblock(x, y, x_size, y_size);
 
         try (Scanner scanner = new Scanner(line)) {
-            // Parse foreground/background flag
-            macroblock.isForeground = (scanner.nextInt() == 1);
+            // Parse the foreground/background flag
+            if (scanner.hasNextInt()) {
+                macroblock.isForeground = scanner.nextInt() == 1;
+            } else {
+                throw new IllegalArgumentException("Invalid line format: missing foreground/background flag.");
+            }
 
-            // Parse DCT coefficients for R, G, B components
-            parseCoefficients(scanner, macroblock.dctCoefficientsR);
-            parseCoefficients(scanner, macroblock.dctCoefficientsG);
-            parseCoefficients(scanner, macroblock.dctCoefficientsB);
+            // Parse the remaining 3 DCT coefficient sets
+            for (int i = 0; i < 4; i++) {
+                // Parse DCT coefficients for R, G, B components
+                parseCoefficients(scanner, macroblock.dctCoefficientsR[i]);
+                parseCoefficients(scanner, macroblock.dctCoefficientsG[i]);
+                parseCoefficients(scanner, macroblock.dctCoefficientsB[i]);
+            }
         }
 
         return macroblock;
@@ -352,6 +359,11 @@ public class DCTVideoEncoder {
                 }
 
                 buf.clear(); // Clear the buffer for the next frame
+
+                //stop at 100 frames
+                if(frameCount > 100) {
+                    break;
+                }
             }
 
         } catch (IOException e) {
@@ -438,24 +450,27 @@ public class DCTVideoEncoder {
 
     // Method appendCoefficientsToStringBuilder(sb, mb.dctCoefficientsR,
     // mb.dctCoefficientsG, mb.dctCoefficientsB)
-    public void appendCoefficientsToStringBuilder(StringBuilder sb, double[][] rCoeffs, double[][] gCoeffs,
-            double[][] bCoeffs) {
-        // Append R coefficients
-        for (int y = 0; y < 8; y++) {
-            for (int x = 0; x < 8; x++) {
-                sb.append((int) rCoeffs[y][x]).append(" ");
+    public void appendCoefficientsToStringBuilder(StringBuilder sb, double[][][] rCoeffs, double[][][] gCoeffs,
+            double[][][] bCoeffs) {
+
+        for(int i = 0; i < 4; i++) {
+            // Append R coefficients
+            for (int y = 0; y < 8; y++) {
+                for (int x = 0; x < 8; x++) {
+                    sb.append((int) rCoeffs[i][y][x]).append(" ");
+                }
             }
-        }
-        // Append G coefficients
-        for (int y = 0; y < 8; y++) {
-            for (int x = 0; x < 8; x++) {
-                sb.append((int) gCoeffs[y][x]).append(" ");
+            // Append G coefficients
+            for (int y = 0; y < 8; y++) {
+                for (int x = 0; x < 8; x++) {
+                    sb.append((int) gCoeffs[i][y][x]).append(" ");
+                }
             }
-        }
-        // Append B coefficients
-        for (int y = 0; y < 8; y++) {
-            for (int x = 0; x < 8; x++) {
-                sb.append((int) bCoeffs[y][x]).append(" ");
+            // Append B coefficients
+            for (int y = 0; y < 8; y++) {
+                for (int x = 0; x < 8; x++) {
+                    sb.append((int) bCoeffs[i][y][x]).append(" ");
+                }
             }
         }
         // Add a newline at the end
@@ -798,6 +813,7 @@ public class DCTVideoEncoder {
         double[][] blockG = new double[8][8];
         double[][] blockB = new double[8][8];
 
+        int dctBlockCount = 0;
         for (int i = 0; i < macroblockSize; i += 8) {
             for (int j = 0; j < macroblockSize; j += 8) {
                 for (int y = 0; y < 8; y++) {
@@ -813,12 +829,13 @@ public class DCTVideoEncoder {
                         blockB[y][x] = frame.B[idx] - 128;
                     }
                 }
-                mb.dctCoefficientsR = applyDCT(blockR);
-                mb.dctCoefficientsG = applyDCT(blockG);
-                mb.dctCoefficientsB = applyDCT(blockB);
+                mb.dctCoefficientsR[dctBlockCount] = applyDCT(blockR);
+                mb.dctCoefficientsG[dctBlockCount] = applyDCT(blockG);
+                mb.dctCoefficientsB[dctBlockCount] = applyDCT(blockB);
                 // quantize(mb.dctCoefficientsR, n);
                 // quantize(mb.dctCoefficientsG, n);
                 // quantize(mb.dctCoefficientsB, n);
+                dctBlockCount++;
             }
         }
     }
@@ -864,6 +881,7 @@ public class DCTVideoEncoder {
         double[][] blockR = new double[8][8];
         double[][] blockG = new double[8][8];
         double[][] blockB = new double[8][8];
+        int dctBlockCount = 0;
         for (int i = 0; i < macroblockSize; i += 8) {
             for (int j = 0; j < macroblockSize; j += 8) {
                 // Dequantize coefficients
@@ -872,9 +890,10 @@ public class DCTVideoEncoder {
                 // dequantize(mb.dctCoefficientsB, n);
 
                 // Perform IDCT
-                blockR = applyInverseDCT(mb.dctCoefficientsR);
-                blockG = applyInverseDCT(mb.dctCoefficientsG);
-                blockB = applyInverseDCT(mb.dctCoefficientsB);
+                blockR = applyInverseDCT(mb.dctCoefficientsR[dctBlockCount]);
+                blockG = applyInverseDCT(mb.dctCoefficientsG[dctBlockCount]);
+                blockB = applyInverseDCT(mb.dctCoefficientsB[dctBlockCount]);
+                dctBlockCount++;
 
                 // Store reconstructed pixel values back into the frame
                 for (int y = 0; y < 8; y++) {

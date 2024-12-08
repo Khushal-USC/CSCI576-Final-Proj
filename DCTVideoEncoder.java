@@ -95,7 +95,7 @@ public class DCTVideoEncoder {
     // REAL MAIN
     public static void main(String[] args) {
         // Check if the correct number of arguments is passed
-        if (args.length != 4) {
+        if (args.length != 5) {
             System.out.println("Incorrect Param Length: See README for usage instructions.");
             System.out.println(args.length);
             for (String arg : args) {
@@ -114,18 +114,21 @@ public class DCTVideoEncoder {
         int height = 540;
         int n1 = 0;
         int n2 = 0;
+        String option = args[4];
 
         // Start teh cmp file
         System.out.println(filePath);
         String[] splitPath = filePath.split("\\\\");
         cmpFilePath = splitPath[splitPath.length - 1].split("\\.rgb")[0] + ".cmp";
 
-        // try {
-        //     createCmpFile(cmpFilePath, n1, n2);
-        // } catch (IOException e) {
-        //     System.out.println("Error creating .cmp file.");
-        //     return;
-        // }
+        if(option.equals("c")){
+            try {
+                createCmpFile(cmpFilePath, n1, n2);
+            } catch (IOException e) {
+                System.out.println("Error creating .cmp file.");
+                return;
+            }
+        }
 
         try {
             n1 = Integer.parseInt(args[2]);
@@ -143,7 +146,7 @@ public class DCTVideoEncoder {
 
         DCTVideoEncoder ren = new DCTVideoEncoder();
 
-        ren.processVideo(filePath, audioPath, width, height, n1, n2);
+        ren.processVideo(filePath, audioPath, width, height, n1, n2, option);
         System.out.println();
 
     }
@@ -161,7 +164,7 @@ public class DCTVideoEncoder {
         }
     }
 
-    public void processVideo(String filePath, String audioPath, int width, int height, int n1, int n2) {
+    public void processVideo(String filePath, String audioPath, int width, int height, int n1, int n2, String option) {
         // Precompute the cosine tables
         precomputeCosTables();
 
@@ -175,22 +178,29 @@ public class DCTVideoEncoder {
         // // Read .rgb input
 
         RGBFrameData prevFrame = null;
+
+        if(option.equals("c")){
+            // Read the frames, compress and write to the .cmp file, im pretty sure this works
+            readFrameCompressAndWrite(filePath, width, height, totalFrames, prevFrame,
+            n1, n2);
+        } else {
+            // Initialize the frames array
+            ArrayList<BufferedImage> frames = new ArrayList<BufferedImage>();
+
+            // Call function to read the .cmp file and write the frames to the frames array
+            int macroblockSize = 16;
+            int macroblocksWidth = (int) Math.ceil((double) width / macroblockSize);
+            int macroblocksHeight = (int) Math.ceil((double) height / macroblockSize);
+            int macroblocksPerFrame = macroblocksWidth * macroblocksHeight;
+            readCmpDecompressAndGenerateFrames(frames, width, height, macroblocksPerFrame, n1, n2);
+
+            // Initialize the FrameAudioPlayer
+            FrameAudioPlayer.playFramesWithAudio(frames, 30, audioPath);
+        }
+
         
-        // // Read the frames, compress and write to the .cmp file, im pretty sure this works
-        // readFrameCompressAndWrite(filePath, width, height, totalFrames, prevFrame, n1, n2);
 
-        //Initialize the frames array
-        ArrayList<BufferedImage> frames = new ArrayList<BufferedImage>();
-
-        //Call function to read the .cmp file and write the frames to the frames array
-        int macroblockSize = 16;
-        int macroblocksWidth = (int) Math.ceil((double) width / macroblockSize);
-        int macroblocksHeight = (int) Math.ceil((double) height / macroblockSize);
-        int macroblocksPerFrame = macroblocksWidth * macroblocksHeight;
-        readCmpDecompressAndGenerateFrames(frames, width, height, macroblocksPerFrame, n1, n2);
-
-        //Initialize the FrameAudioPlayer
-        FrameAudioPlayer.playFramesWithAudio(frames, 30, audioPath);
+        
 
     }
 
@@ -252,7 +262,7 @@ public class DCTVideoEncoder {
         for (int i = 0; i < 8; i++) {
             for (int j = 0; j < 8; j++) {
                 if (scanner.hasNextInt()) {
-                    coefficients[i][j] = (double)scanner.nextInt();
+                    coefficients[i][j] = (double) scanner.nextInt();
                 } else {
                     throw new IllegalArgumentException("Invalid line format: missing coefficient values.");
                 }
@@ -269,6 +279,8 @@ public class DCTVideoEncoder {
         try (FileInputStream fileInputStream = new FileInputStream(inputFilePath);
                 FileChannel fileChannel = fileInputStream.getChannel()) {
 
+            // String builder for this frame
+            StringBuilder sb = new StringBuilder();
             while (fileChannel.read(buf) > 0) {
                 buf.flip(); // Prepare the buffer for reading
                 RGBFrameData frameData = new RGBFrameData(width, height);
@@ -298,9 +310,6 @@ public class DCTVideoEncoder {
 
                 Macroblock[] macroblocks = segmentFrame(frameData, prevFrame, width, height, macroblocksPerFrame);
 
-                // String builder for this frame
-                StringBuilder sb = new StringBuilder();
-
                 // Apply DCT and quantization
                 for (Macroblock mb : macroblocks) {
                     if (mb.isForeground) {
@@ -312,67 +321,125 @@ public class DCTVideoEncoder {
                     sb.append(mb.isForeground ? "1 " : "0 ");
                     appendCoefficientsToStringBuilder(sb, mb.dctCoefficientsR, mb.dctCoefficientsG,
                             mb.dctCoefficientsB);
+                    // Add a newline at the end
+                    sb.append("\n");
                 }
 
-                // Write to file with lock and retry mechanism
-                int maxRetries = 10; // Maximum number of retries
-                int attempt = 0;
-                boolean success = false;
+                int batchSize = 5;
+                if (frameCount % batchSize == 0) {
+                    System.out.println(
+                            "Processed " + frameCount + " frames." + " Writing " + batchSize + " frames to file.");
+                    // Write to file with lock and retry mechanism
+                    int maxRetries = 10; // Maximum number of retries
+                    int attempt = 0;
+                    boolean success = false;
 
-                while (attempt < maxRetries && !success) {
-                    try (FileOutputStream fos = new FileOutputStream(cmpFilePath, true); // Open in append mode
-                            FileChannel channel = fos.getChannel();
-                            FileLock lock = channel.lock()) { // Acquire an exclusive lock
+                    while (attempt < maxRetries && !success) {
+                        try (FileOutputStream fos = new FileOutputStream(cmpFilePath, true); // Open in append mode
+                                FileChannel channel = fos.getChannel();
+                                FileLock lock = channel.lock()) { // Acquire an exclusive lock
 
-                        // Write the frame data to the file while the lock is held
-                        fos.write(sb.toString().getBytes());
-                        System.out.println("Wrote macroblocks for frame " + frameCount + " to file with lock after "
-                                + attempt + " attempts.");
-                        success = true; // Mark success to exit the loop
+                            // Write the frame data to the file while the lock is held
+                            fos.write(sb.toString().getBytes());
+                            System.out.println("Wrote macroblocks for frame " + frameCount + " to file with lock after "
+                                    + attempt + " attempts.");
+                            success = true; // Mark success to exit the loop
 
-                    } catch (IOException e) {
-                        attempt++;
-                        System.err.println("Attempt " + attempt + " failed to write to file: " + cmpFilePath + " for frame "
-                                + frameCount + "\n" + e.getMessage() + "\nRetrying...");
+                        } catch (IOException e) {
+                            attempt++;
+                            System.err.println(
+                                    "Attempt " + attempt + " failed to write to file: " + cmpFilePath + " for frame "
+                                            + frameCount + "\n" + e.getMessage() + "\nRetrying...");
 
-                        if (attempt < maxRetries) {
-                            try {
-                                Thread.sleep(100); // Wait for 100ms before retrying
-                            } catch (InterruptedException ie) {
-                                Thread.currentThread().interrupt(); // Restore interrupted status
-                                System.err.println("Retry interrupted.");
-                                break;
+                            if (attempt < maxRetries) {
+                                try {
+                                    Thread.sleep(100); // Wait for 100ms before retrying
+                                } catch (InterruptedException ie) {
+                                    Thread.currentThread().interrupt(); // Restore interrupted status
+                                    System.err.println("Retry interrupted.");
+                                    break;
+                                }
+                            } else {
+                                System.err.println("Max retries reached. Failed to write to file: " + cmpFilePath);
                             }
-                        } else {
-                            System.err.println("Max retries reached. Failed to write to file: " + cmpFilePath);
                         }
                     }
+
+                    if (!success) {
+                        System.err.println("Unable to write to file after " + maxRetries + " attempts.");
+                    }
+
+                    //Clear the string builder
+                    sb.setLength(0);
                 }
 
-                if (!success) {
-                    System.err.println("Unable to write to file after " + maxRetries + " attempts.");
-                }
-
-                if(prevFrame == null) {
+                if (prevFrame == null) {
                     prevFrame = frameData;
                     System.out.println("First frame processed");
                 }
 
                 buf.clear(); // Clear the buffer for the next frame
 
-                //stop at 100 frames
-                if(frameCount > 100) {
-                    break;
+                // // stop at 100 frames
+                // if (frameCount > 100) {
+                // break;
+                // }
+            }
+
+            // Write the remaining frames
+            // Write to file with lock and retry mechanism
+            int maxRetries = 10; // Maximum number of retries
+            int attempt = 0;
+            boolean success = false;
+
+            while (attempt < maxRetries && !success) {
+                try (FileOutputStream fos = new FileOutputStream(cmpFilePath, true); // Open in append mode
+                        FileChannel channel = fos.getChannel();
+                        FileLock lock = channel.lock()) { // Acquire an exclusive lock
+
+                    // Write the frame data to the file while the lock is held
+                    fos.write(sb.toString().getBytes());
+                    System.out.println("Wrote macroblocks for frame " + frameCount + " to file with lock after "
+                            + attempt + " attempts.");
+                    success = true; // Mark success to exit the loop
+
+                } catch (IOException e) {
+                    attempt++;
+                    System.err.println("Attempt " + attempt + " failed to write to file: " + cmpFilePath + " for frame "
+                            + frameCount + "\n" + e.getMessage() + "\nRetrying...");
+
+                    if (attempt < maxRetries) {
+                        try {
+                            Thread.sleep(100); // Wait for 100ms before retrying
+                        } catch (InterruptedException ie) {
+                            Thread.currentThread().interrupt(); // Restore interrupted status
+                            System.err.println("Retry interrupted.");
+                            break;
+                        }
+                    } else {
+                        System.err.println("Max retries reached. Failed to write to file: " + cmpFilePath);
+                    }
                 }
             }
+
+            if (!success) {
+                System.err.println("Unable to write to file after " + maxRetries + " attempts.");
+            }
+
+            //Clear the string builder
+            sb.setLength(0);
+
+            //
 
         } catch (IOException e) {
             e.printStackTrace();
         }
     }
 
-    // Method to read the .cmp file, decompress the frames and generate the frames readCmpDecompressAndGenerateFrames(frames, width, height, totalFrames)
-    public void readCmpDecompressAndGenerateFrames(ArrayList<BufferedImage> frames, int width, int height, int macroblocksPerFrame, int n1, int n2) {
+    // Method to read the .cmp file, decompress the frames and generate the frames
+    // readCmpDecompressAndGenerateFrames(frames, width, height, totalFrames)
+    public void readCmpDecompressAndGenerateFrames(ArrayList<BufferedImage> frames, int width, int height,
+            int macroblocksPerFrame, int n1, int n2) {
         System.out.println("Reading .cmp file and generating frames " + cmpFilePath);
         int frameCount = 0;
         int lineCount = 0;
@@ -382,23 +449,23 @@ public class DCTVideoEncoder {
 
             while (scanner.hasNextLine()) {
                 String line = scanner.nextLine();
-                //System.out.println("Reading line " + lineCount++);
-                //Check if the line is empty
+                // System.out.println("Reading line " + lineCount++);
+                // Check if the line is empty
                 if (line.isEmpty()) {
                     continue;
                 }
                 if (frameCount == 0) {
                     System.out.println("Reading n1 and n2 values");
-                    //Read the n1 and n2 values
+                    // Read the n1 and n2 values
                     String[] nValues = line.split(" ");
                     // n1 = Integer.parseInt(nValues[0]);
                     // n2 = Integer.parseInt(nValues[1]);
                     System.out.println("n1: " + n1 + " n2: " + n2);
                     frameCount++;
                     continue;
-                    
+
                 }
-                //Readigs macroblocks for the current frame
+                // Readigs macroblocks for the current frame
                 System.out.println("Reading macroblocks for frame " + frameCount);
                 RGBFrameData frameData = new RGBFrameData(width, height);
                 int x = 0;
@@ -406,26 +473,26 @@ public class DCTVideoEncoder {
                 Macroblock[] macroblocks = new Macroblock[macroblocksPerFrame];
                 int macroblockIndex = 0;
 
-                //Go through macroblockPerFrame number of lines
+                // Go through macroblockPerFrame number of lines
                 for (int i = 0; i < macroblocksPerFrame; i++) {
-                    //Parse the line to a macroblock
+                    // Parse the line to a macroblock
                     Macroblock mb = parseLineToMacroblock(line, x, y, 16, 16);
-                    //Iterate the x position, if it reaches the width, reset it and increment y
+                    // Iterate the x position, if it reaches the width, reset it and increment y
                     x += 16;
                     if (x >= width) {
                         x = 0;
                         y += 16;
                     }
 
-                    //Apply IDCT and dequantization
+                    // Apply IDCT and dequantization
                     applyIDCTAndDequantize(mb, frameData, width, height, mb.isForeground ? n1 : n2);
 
                     macroblocks[macroblockIndex++] = mb;
-                    if(scanner.hasNextLine()) {
+                    if (scanner.hasNextLine()) {
                         line = scanner.nextLine();
                     }
-                    //System.out.println("Reading line " + lineCount++);
-                    //System.out.println(line.substring(0, 10));
+                    // System.out.println("Reading line " + lineCount++);
+                    // System.out.println(line.substring(0, 10));
                 }
 
                 // Create a new frame image
@@ -438,7 +505,8 @@ public class DCTVideoEncoder {
                 frames.add(img);
 
                 // //Display the frame
-                // displayLabeledFrame(img, frameCount > 0 ? frames.get(frameCount - 1) : null, lbIm1, "Frame " + frameCount);
+                // displayLabeledFrame(img, frameCount > 0 ? frames.get(frameCount - 1) : null,
+                // lbIm1, "Frame " + frameCount);
 
                 frameCount++;
 
@@ -453,7 +521,7 @@ public class DCTVideoEncoder {
     public void appendCoefficientsToStringBuilder(StringBuilder sb, double[][][] rCoeffs, double[][][] gCoeffs,
             double[][][] bCoeffs) {
 
-        for(int i = 0; i < 4; i++) {
+        for (int i = 0; i < 4; i++) {
             // Append R coefficients
             for (int y = 0; y < 8; y++) {
                 for (int x = 0; x < 8; x++) {
@@ -473,8 +541,7 @@ public class DCTVideoEncoder {
                 }
             }
         }
-        // Add a newline at the end
-        sb.append("\n");
+
     }
 
     // Method to append stringbuilder to file
@@ -668,8 +735,9 @@ public class DCTVideoEncoder {
                 macroblocks[macroblockIndex++] = mb;
             }
         }
-        //if no previous frame, just mark all as foreground and return the macroblocks, this is the first frame
-        if(previousFrame == null){
+        // if no previous frame, just mark all as foreground and return the macroblocks,
+        // this is the first frame
+        if (previousFrame == null) {
             for (Macroblock mb : macroblocks) {
                 mb.isForeground = true;
             }

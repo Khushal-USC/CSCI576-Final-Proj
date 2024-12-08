@@ -900,9 +900,9 @@ public class DCTVideoEncoder {
                 mb.dctCoefficientsR[dctBlockCount] = applyDCT(blockR);
                 mb.dctCoefficientsG[dctBlockCount] = applyDCT(blockG);
                 mb.dctCoefficientsB[dctBlockCount] = applyDCT(blockB);
-                // quantize(mb.dctCoefficientsR, n);
-                // quantize(mb.dctCoefficientsG, n);
-                // quantize(mb.dctCoefficientsB, n);
+                quantize(mb.dctCoefficientsR[dctBlockCount], n);
+                quantize(mb.dctCoefficientsG[dctBlockCount], n);
+                quantize(mb.dctCoefficientsB[dctBlockCount], n);
                 dctBlockCount++;
             }
         }
@@ -953,9 +953,9 @@ public class DCTVideoEncoder {
         for (int i = 0; i < macroblockSize; i += 8) {
             for (int j = 0; j < macroblockSize; j += 8) {
                 // Dequantize coefficients
-                // dequantize(mb.dctCoefficientsR, n);
-                // dequantize(mb.dctCoefficientsG, n);
-                // dequantize(mb.dctCoefficientsB, n);
+                dequantize(mb.dctCoefficientsR[dctBlockCount], n);
+                dequantize(mb.dctCoefficientsG[dctBlockCount], n);
+                dequantize(mb.dctCoefficientsB[dctBlockCount], n);
 
                 // Perform IDCT
                 blockR = applyInverseDCT(mb.dctCoefficientsR[dctBlockCount]);

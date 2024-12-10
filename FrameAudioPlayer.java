@@ -37,12 +37,16 @@ public class FrameAudioPlayer {
         JLabel label = new JLabel(new ImageIcon(frames.get(0))); // Start with the first frame
         frame.getContentPane().add(label, BorderLayout.CENTER);
 
-        // Control Buttons for play/pause and replay
+        // Control Buttons for play/pause, replay, and frame-by-frame navigation
         JPanel controlPanel = new JPanel();
         JButton playPauseButton = new JButton("Play");
         JButton replayButton = new JButton("Replay");
+        JButton nextFrameButton = new JButton("Next Frame");
+        JButton previousFrameButton = new JButton("Previous Frame");
         controlPanel.add(playPauseButton);
         controlPanel.add(replayButton);
+        controlPanel.add(previousFrameButton);
+        controlPanel.add(nextFrameButton);
         frame.add(controlPanel, BorderLayout.SOUTH);
 
         frame.pack();
@@ -108,6 +112,24 @@ public class FrameAudioPlayer {
             label.setIcon(new ImageIcon(frames.get(0)));
             label.repaint();
             audioClip.start();
+        });
+
+        // Next Frame Button Logic
+        nextFrameButton.addActionListener(e -> {
+            if (!isPlaying.get() && currentFrameIndex[0] < totalFrames - 1) { // Only when paused
+                currentFrameIndex[0]++;
+                label.setIcon(new ImageIcon(frames.get(currentFrameIndex[0])));
+                label.repaint();
+            }
+        });
+
+        // Previous Frame Button Logic
+        previousFrameButton.addActionListener(e -> {
+            if (!isPlaying.get() && currentFrameIndex[0] > 0) { // Only when paused
+                currentFrameIndex[0]--;
+                label.setIcon(new ImageIcon(frames.get(currentFrameIndex[0])));
+                label.repaint();
+            }
         });
 
         // Frame Duration

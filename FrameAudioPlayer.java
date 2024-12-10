@@ -21,7 +21,7 @@ public class FrameAudioPlayer {
             return;
         }
 
-        // Load the audio file
+        //load the audio file
         Clip audioClip;
         try {
             AudioInputStream audioStream = AudioSystem.getAudioInputStream(new File(audioFile));
@@ -32,12 +32,13 @@ public class FrameAudioPlayer {
             return;
         }
 
-        // Create a JFrame to display the frames
+        //create a JFrame to display the frames
         JFrame frame = new JFrame("Frame Audio Player");
-        JLabel label = new JLabel(new ImageIcon(frames.get(0))); // Start with the first frame
+        //starting with the first frame
+        JLabel label = new JLabel(new ImageIcon(frames.get(0))); 
         frame.getContentPane().add(label, BorderLayout.CENTER);
 
-        // Control Buttons for play/pause, replay, and frame-by-frame navigation
+        //control Buttons for play/pause, replay, and frame-by-frame navigation
         JPanel controlPanel = new JPanel();
         JButton playPauseButton = new JButton("Play");
         JButton replayButton = new JButton("Replay");
@@ -52,26 +53,29 @@ public class FrameAudioPlayer {
         frame.pack();
         frame.setVisible(true);
 
-        // State variables
-        AtomicBoolean isPlaying = new AtomicBoolean(false); // Start paused
+        //state variables
+        //start the video paused
+        AtomicBoolean isPlaying = new AtomicBoolean(false);
         AtomicBoolean isReplayRequested = new AtomicBoolean(false);
         int totalFrames = frames.size();
-        int[] currentFrameIndex = {0}; // Track the current frame index
+        //track current frame index
+        int[] currentFrameIndex = {0}; 
 
-        // Key Listener for frame-by-frame navigation
+        //key Listener for frame-by-frame navigation
         frame.addKeyListener(new java.awt.event.KeyAdapter() {
             @Override
             public void keyPressed(java.awt.event.KeyEvent e) {
-                if (!isPlaying.get()) { // Only allow frame-by-frame navigation when paused
+                //only allow frame-by-frame navigation when paused
+                if (!isPlaying.get()) { 
                     if (e.getKeyCode() == java.awt.event.KeyEvent.VK_RIGHT) {
-                        // Go to the next frame
+                        //go to the next frame
                         if (currentFrameIndex[0] < totalFrames - 1) {
                             currentFrameIndex[0]++;
                             label.setIcon(new ImageIcon(frames.get(currentFrameIndex[0])));
                             label.repaint();
                         }
                     } else if (e.getKeyCode() == java.awt.event.KeyEvent.VK_LEFT) {
-                        // Go to the previous frame
+                        //go to the previous frame
                         if (currentFrameIndex[0] > 0) {
                             currentFrameIndex[0]--;
                             label.setIcon(new ImageIcon(frames.get(currentFrameIndex[0])));
@@ -82,74 +86,79 @@ public class FrameAudioPlayer {
             }
         });
 
-        // Play/Pause Button Logic
+        //play/Pause Button Logic
         playPauseButton.addActionListener(e -> {
             if (isPlaying.get()) {
-                // Pause the video
+                //pause the video
                 isPlaying.set(false);
                 playPauseButton.setText("Play");
                 audioClip.stop();
             } else {
-                // Resume the video
+                //resume the video
                 isPlaying.set(true);
                 playPauseButton.setText("Pause");
                 if (currentFrameIndex[0] == 0 || isReplayRequested.get()) {
-                    audioClip.setFramePosition(0); // Restart audio if at the beginning
+                    //restart audio if at the beginning
+                    audioClip.setFramePosition(0); 
                     isReplayRequested.set(false);
                 }
                 audioClip.start();
             }
         });
 
-        // Replay Button Logic
+        //replay Button Logic
         replayButton.addActionListener(e -> {
             isReplayRequested.set(true);
             isPlaying.set(true);
             playPauseButton.setText("Pause");
             audioClip.stop();
-            audioClip.setFramePosition(0); // Restart audio
-            currentFrameIndex[0] = 0; // Restart from the first frame
+            //restart audio
+            audioClip.setFramePosition(0);
+            //restart from the first frame 
+            currentFrameIndex[0] = 0;
             label.setIcon(new ImageIcon(frames.get(0)));
             label.repaint();
             audioClip.start();
         });
 
-        // Next Frame Button Logic
+        //next Frame Button Logic
         nextFrameButton.addActionListener(e -> {
-            if (!isPlaying.get() && currentFrameIndex[0] < totalFrames - 1) { // Only when paused
+            //only when paused
+            if (!isPlaying.get() && currentFrameIndex[0] < totalFrames - 1) { 
                 currentFrameIndex[0]++;
                 label.setIcon(new ImageIcon(frames.get(currentFrameIndex[0])));
                 label.repaint();
             }
         });
 
-        // Previous Frame Button Logic
+        //previous Frame Button Logic
         previousFrameButton.addActionListener(e -> {
-            if (!isPlaying.get() && currentFrameIndex[0] > 0) { // Only when paused
+            //only when paused
+            if (!isPlaying.get() && currentFrameIndex[0] > 0) { 
                 currentFrameIndex[0]--;
                 label.setIcon(new ImageIcon(frames.get(currentFrameIndex[0])));
                 label.repaint();
             }
         });
 
-        // Frame Duration
+        //frame Duration
         long frameDurationMs = (long) (1000.0 / fps);
 
-        // Playback loop
+        //playback loop
         new Thread(() -> {
             while (true) {
                 if (isReplayRequested.get()) {
-                    // Reset for replay
+                    //reset for replay
                     currentFrameIndex[0] = 0;
                     isReplayRequested.set(false);
                 }
 
                 if (isPlaying.get() && currentFrameIndex[0] < totalFrames) {
-                    // Display the current frame
+                    //display the current frame
                     label.setIcon(new ImageIcon(frames.get(currentFrameIndex[0])));
                     label.repaint();
 
-                    // Wait for the next frame
+                    //wait for the next frame
                     try {
                         Thread.sleep(frameDurationMs);
                     } catch (InterruptedException ex) {
@@ -158,7 +167,7 @@ public class FrameAudioPlayer {
 
                     currentFrameIndex[0]++;
                 } else if (currentFrameIndex[0] >= totalFrames) {
-                    // Stop playback at the end
+                    //stop playback at the end
                     isPlaying.set(false);
                     playPauseButton.setText("Play");
                     audioClip.stop();
@@ -170,16 +179,17 @@ public class FrameAudioPlayer {
     }
 
     public static void main(String[] args) {
-        // Test with simple generated frames (e.g., gradient frames)
+        //test with simple generated frames (e.g., gradient frames)
         int width = 640;
         int height = 480;
-        int totalFrames = 60; // 2 seconds at 30 FPS
+        //2 seconds at 30FPS
+        int totalFrames = 60; 
         List<BufferedImage> testFrames = generateTestFrames(width, height, totalFrames);
 
-        // Path to your audio file
+        //path to your audio file
         String audioFile = "test_audio.wav";
 
-        // Play the frames with synchronized audio
+        //play the frames with synchronized audio
         playFramesWithAudio(testFrames, 30, audioFile);
     }
 
@@ -193,7 +203,7 @@ public class FrameAudioPlayer {
             BufferedImage img = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
             Graphics2D g = img.createGraphics();
 
-            // Draw a gradient that changes with the frame index
+            //draw a gradient that changes with the frame index
             g.setPaint(new GradientPaint(0, 0, Color.BLACK, width, height, new Color(i * 4 % 255, i * 8 % 255, i * 16 % 255)));
             g.fillRect(0, 0, width, height);
 

@@ -439,60 +439,63 @@ public class DCTVideoEncoder {
     // Method to read the .cmp file, decompress the frames and generate the frames
     // readCmpDecompressAndGenerateFrames(frames, width, height, totalFrames)
     public void readCmpDecompressAndGenerateFrames(ArrayList<BufferedImage> frames, int width, int height,
-            int macroblocksPerFrame, int n1, int n2) {
-        System.out.println("Reading .cmp file and generating frames " + cmpFilePath);
-        int frameCount = 0;
-        int lineCount = 0;
+                                               int macroblocksPerFrame, int n1, int n2) {
+        System.out.println("Reading .cmp file and generating frames: " + cmpFilePath);
+        int frameCount = 0; // Dynamic frame count
+        boolean isFirstFrame = true;
 
         try (FileInputStream fis = new FileInputStream(cmpFilePath);
-                Scanner scanner = new Scanner(fis)) {
+            Scanner scanner = new Scanner(fis)) {
 
             while (scanner.hasNextLine()) {
-                String line = scanner.nextLine();
-                // System.out.println("Reading line " + lineCount++);
-                // Check if the line is empty
-                if (line.isEmpty()) {
-                    continue;
+                // For the first frame, read n1 and n2 values
+                if (isFirstFrame) {
+                    if (scanner.hasNextLine()) {
+                        String nValuesLine = scanner.nextLine().trim();
+                        if (!nValuesLine.isEmpty()) {
+                            System.out.println("Reading n1 and n2 values");
+                            System.out.println("n1: " + n1 + ", n2: " + n2);
+                            isFirstFrame = false; // Only read n1 and n2 once
+                            continue;
+                        }
+                    }
                 }
-                if (frameCount == 0) {
-                    System.out.println("Reading n1 and n2 values");
-                    // Read the n1 and n2 values
-                    String[] nValues = line.split(" ");
-                    // n1 = Integer.parseInt(nValues[0]);
-                    // n2 = Integer.parseInt(nValues[1]);
-                    System.out.println("n1: " + n1 + " n2: " + n2);
-                    frameCount++;
-                    continue;
 
-                }
-                // Readigs macroblocks for the current frame
+                // Start processing macroblocks for the current frame
                 System.out.println("Reading macroblocks for frame " + frameCount);
                 RGBFrameData frameData = new RGBFrameData(width, height);
-                int x = 0;
-                int y = 0;
                 Macroblock[] macroblocks = new Macroblock[macroblocksPerFrame];
-                int macroblockIndex = 0;
+                int x = 0, y = 0;
 
-                // Go through macroblockPerFrame number of lines
                 for (int i = 0; i < macroblocksPerFrame; i++) {
-                    // Parse the line to a macroblock
-                    Macroblock mb = parseLineToMacroblock(line, x, y, 16, 16);
-                    // Iterate the x position, if it reaches the width, reset it and increment y
+                    if (!scanner.hasNextLine()) {
+                        System.err.println("Warning: Unexpected end of file while processing frame " + frameCount);
+                        break; // Break if there are no more lines
+                    }
+
+                    // Read and parse the current line
+                    String line = scanner.nextLine().trim();
+                    if (line.isEmpty()) {
+                        i--; // Retry the current macroblock if the line is empty
+                        continue;
+                    }
+
+                    int blockWidth = Math.min(16, width - x);
+                    int blockHeight = Math.min(16, height - y);
+
+                    // Parse macroblock from line
+                    Macroblock mb = parseLineToMacroblock(line, x, y, blockWidth, blockHeight);
+                    macroblocks[i] = mb;
+
+                    // Apply IDCT and dequantization
+                    applyIDCTAndDequantize(mb, frameData, width, height, mb.isForeground ? n1 : n2);
+
+                    // Update coordinates
                     x += 16;
                     if (x >= width) {
                         x = 0;
                         y += 16;
                     }
-
-                    // Apply IDCT and dequantization
-                    applyIDCTAndDequantize(mb, frameData, width, height, mb.isForeground ? n1 : n2);
-
-                    macroblocks[macroblockIndex++] = mb;
-                    if (scanner.hasNextLine()) {
-                        line = scanner.nextLine();
-                    }
-                    // System.out.println("Reading line " + lineCount++);
-                    // System.out.println(line.substring(0, 10));
                 }
 
                 // Create a new frame image
@@ -501,16 +504,13 @@ public class DCTVideoEncoder {
                 // Draw debug outlines
                 drawDebugOutlines(img, macroblocks);
 
-                // Add the frame to the frames array
+                // Add the frame to the list
                 frames.add(img);
-
-                // //Display the frame
-                // displayLabeledFrame(img, frameCount > 0 ? frames.get(frameCount - 1) : null,
-                // lbIm1, "Frame " + frameCount);
-
                 frameCount++;
-
             }
+
+            System.out.println("Total frames read: " + frameCount);
+
         } catch (IOException e) {
             e.printStackTrace();
         }

@@ -37,7 +37,7 @@ class Macroblock {
     }
 }
 
-public class DCTVideoEncoder {
+public class DCTVideoDecoder {
 
     class RGBFrameData {
         public int[] R;
@@ -98,7 +98,7 @@ public class DCTVideoEncoder {
     //main function
     public static void main(String[] args) {
         //check for correct number of arguments by user input
-        if (args.length != 3) {
+        if (args.length != 2) {
             System.out.println("Incorrect Param Length: See README for usage instructions.");
             System.out.println(args.length);
             for (String arg : args) {
@@ -111,44 +111,36 @@ public class DCTVideoEncoder {
         System.out.println("Max Heap Size: " + maxHeapSize / (1024 * 1024) + " MB");
 
         //parsing command-line arguments that were inputted
-        String filePath = args[0];
-        String audioPath = "";
+        cmpFilePath = args[0];
+        String audioPath = args[1];
         int width = 960;
         int height = 540;
-        int n1 = 0; 
+        int n1 = 0;
         int n2 = 0;
-        try {
-            n1 = Integer.parseInt(args[1]);
-            n2 = Integer.parseInt(args[2]);
-        } catch (NumberFormatException e) {
-            System.out.println("Error: n1, n2 should be integers.");
-            return;
-        }
-        //String option = args[4];
+        String option = "";
 
-        //start the cmp file
-        System.out.println(filePath);
-        String[] splitPath = filePath.split("\\\\");
-        cmpFilePath = splitPath[splitPath.length - 1].split("\\.rgb")[0] + ".cmp";
+        // //start the cmp file
+        // System.out.println(filePath);
+        // String[] splitPath = filePath.split("\\\\");
+        // cmpFilePath = splitPath[splitPath.length - 1].split("\\.rgb")[0] + ".cmp";
 
-        try {
-            createCmpFile(cmpFilePath, n1, n2);
-        } catch (IOException e) {
-            System.out.println("Error creating .cmp file.");
-            return;
-        }
+        // try {
+        //     n1 = Integer.parseInt(args[2]);
+        //     n2 = Integer.parseInt(args[3]);
+        // } catch (NumberFormatException e) {
+        //     System.out.println("Error: n1, n2 should be integers.");
+        //     return;
+        // }
 
-        
-
-        System.out.println("File Path: " + filePath);
+        System.out.println("CMP File Path: " + cmpFilePath);
         System.out.println("Audio Path: " + audioPath);
         System.out.println("Width: " + width);
         System.out.println("Height: " + height);
-        System.out.println("Quantization inputs: " + n1 + " " + n2);
+        // System.out.println("Quantization inputs: " + n1 + " " + n2);
 
-        DCTVideoEncoder ren = new DCTVideoEncoder();
+        DCTVideoDecoder ren = new DCTVideoDecoder();
 
-        ren.processVideo(filePath, audioPath, width, height, n1, n2);
+        ren.processVideo("", audioPath, width, height, n1, n2, option);
         System.out.println();
 
     }
@@ -166,7 +158,7 @@ public class DCTVideoEncoder {
         }
     }
 
-    public void processVideo(String filePath, String audioPath, int width, int height, int n1, int n2) {
+    public void processVideo(String filePath, String audioPath, int width, int height, int n1, int n2, String option) {
         //precomputing cosine tables
         precomputeCosTables();
 
@@ -180,9 +172,19 @@ public class DCTVideoEncoder {
         //read rgb file
         RGBFrameData prevFrame = null;
 
-        //read frames, compress and write to .cmp file
-        readFrameCompressAndWrite(filePath, width, height, totalFrames, prevFrame,
-        n1, n2);
+        //initiallize frames array 
+        ArrayList<BufferedImage> frames = new ArrayList<BufferedImage>();
+
+        //call function to read the .cmp file and write the frames to the frames array
+        int macroblockSize = 16;
+        int macroblocksWidth = (int) Math.ceil((double) width / macroblockSize);
+        int macroblocksHeight = (int) Math.ceil((double) height / macroblockSize);
+        int macroblocksPerFrame = macroblocksWidth * macroblocksHeight;
+        readCmpDecompressAndGenerateFrames(frames, width, height, macroblocksPerFrame, n1, n2);
+
+        //initialize the FrameAudioPlayer
+        FrameAudioPlayer.playFramesWithAudio(frames, 30, audioPath);
+        
     }
 
     public void writeFrames(String outputFilePath, ArrayList<BufferedImage> frames, int width, int height) {
@@ -464,6 +466,14 @@ public class DCTVideoEncoder {
                         String nValuesLine = scanner.nextLine().trim();
                         if (!nValuesLine.isEmpty()) {
                             System.out.println("Reading n1 and n2 values");
+                            try (Scanner nValuesScanner = new Scanner(nValuesLine)) {
+                                if (nValuesScanner.hasNextInt()) {
+                                    n1 = nValuesScanner.nextInt();
+                                }
+                                if (nValuesScanner.hasNextInt()) {
+                                    n2 = nValuesScanner.nextInt();
+                                }
+                            }
                             System.out.println("n1: " + n1 + ", n2: " + n2);
                             //only read n1 and n2 once
                             isFirstFrame = false; 

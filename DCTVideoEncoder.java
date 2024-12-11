@@ -382,10 +382,10 @@ public class DCTVideoEncoder {
                     sb.setLength(0);
                 }
 
-                if (prevFrame == null) {
+                // if (prevFrame == null) {
                     prevFrame = frameData;
-                    System.out.println("First frame processed");
-                }
+                //     System.out.println("First frame processed");
+                // }
                 //clear the buffer for the next frame
                 buf.clear(); 
 
